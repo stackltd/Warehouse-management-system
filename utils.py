@@ -82,27 +82,6 @@ def load_file(base, f, field, rec_id, folder=""):
     exe(query=query, param=name, base=base)
 
 
-def reconfigure_logging(path_to_log):
-    """
-    Переконфигурация логгера при смене базы
-    :return:
-    """
-    logger = logging.getLogger()
-    # Очистка обработчиков
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-    # Новый обработчик с нужным форматом
-    handler = logging.FileHandler(filename=path_to_log)
-    formatter = logging.Formatter(
-        fmt="%(asctime)s - %(message)s", datefmt="%d-%m-%Y %H:%M:%S %p"
-    )
-    handler.setFormatter(formatter)
-    handler.setLevel(logging.INFO)
-
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-
 def get_fields(base):
     with open(f"profiles/{base}/fields.json", "r", encoding="utf-8") as file:
         result_dict: dict = json.load(file)

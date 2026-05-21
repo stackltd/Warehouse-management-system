@@ -216,8 +216,7 @@
 #     # for i in range(135, 141):
 #     #     exe(query=f"""DELETE FROM zip WHERE `zip`.`id` = {i}""")
 #
-#     # print(os.path.abspath(""))
-
+#     # print(os.path.abspath
 
 
 import os.path

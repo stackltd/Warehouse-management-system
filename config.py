@@ -8,3 +8,6 @@ class Bases(Enum):
     kroko = "kroko"
     test = "test"
     shaman = "shaman"
+
+SORT_DIRECT = {True: "ASC", False: "DESC"}
+SIZE_BLOCK = 135
