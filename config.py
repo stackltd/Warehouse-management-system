@@ -9,5 +9,6 @@ class Bases(Enum):
     test = "test"
     shaman = "shaman"
 
+
 SORT_DIRECT = {True: "ASC", False: "DESC"}
 SIZE_BLOCK = 135

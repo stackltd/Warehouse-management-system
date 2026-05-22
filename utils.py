@@ -6,7 +6,7 @@ import os
 import transliterate
 from werkzeug.utils import secure_filename
 
-from models import exe
+from models import ControlDatabase
 
 
 def str_corr(str_in, ind):
@@ -70,7 +70,7 @@ def div_string(string_all, size_block):
     return list_strings
 
 
-def load_file(base, f, field, rec_id, folder=""):
+def load_file(f, field, rec_id, folder=""):
     filename = f.filename
     # print(filename)
     latin = transliterate.translit(filename, "ru", reversed=True)
@@ -79,7 +79,7 @@ def load_file(base, f, field, rec_id, folder=""):
     name = secure_filename(latin)
     f.save(os.path.join("static", "files", f"{folder}", name))
     query = f"""UPDATE zip SET `{field}` = ? WHERE id = {rec_id}"""
-    exe(query=query, param=name, base=base)
+    return query, name
 
 
 def get_fields(base):
@@ -102,9 +102,11 @@ def get_fields(base):
 def initialize():
     """Инициализация при запуске приложения/смене базы"""
     from routes import Bases, app
+
     base = app.extensions.get("base")
     if base is None:
         app.extensions["base"], base = [Bases.baren.value] * 2
+    app.extensions["storage"] = ControlDatabase(base)
 
     print(f"Таблица {base}")
 

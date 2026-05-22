@@ -4,7 +4,8 @@ from flask import Flask, request, render_template, redirect, g
 from jinja2 import exceptions
 from flask_wtf.csrf import CSRFProtect
 from forms import ManualForm, PhotoForm
-from models import insert, exe
+
+from models import ControlDatabase
 from config import Bases, SORT_DIRECT, SIZE_BLOCK
 from utils import str_corr, load_file, div_string, initialize
 
@@ -63,7 +64,9 @@ def base_choose():
 
 @app.route("/", methods=["GET", "POST"])
 def stock():
-    base = app.extensions.get("base")
+    base = app.extensions["base"]
+    storage: ControlDatabase = app.extensions["storage"]
+
     res = app.extensions.get("res")
     command = app.extensions.get("command")
     summ_some_fields = app.extensions.get("summ_some_fields")
@@ -74,7 +77,9 @@ def stock():
     result = app.extensions.get("result")
     id_added = app.extensions.get("id_added")
 
-    fields, fields_params, fields_order, statuses, url_for_redirect_from_photo = app.extensions["fields_from_base"]
+    fields, fields_params, fields_order, statuses, url_for_redirect_from_photo = (
+        app.extensions["fields_from_base"]
+    )
     app.extensions["url_for_redirect_from_photo"] = url_for_redirect_from_photo
 
     multidict = request.form
@@ -101,17 +106,14 @@ def stock():
         fields_str = ", ".join(fields_list)
         if multidict.get("вывести всё"):
             command = """SELECT * FROM zip ORDER BY category"""
-            res = exe(query=command, base=base)
         elif multidict.get("заказы"):
             command = f"""SELECT * FROM zip WHERE status in ({', '.join([f"'{x}'" for x in statuses][:-1])}) ORDER BY history"""
-            res = exe(query=command, base=base)
-            # print(f"{res = }")
         else:
             command = f"""SELECT * FROM zip WHERE category IN ({fields_str}) ORDER BY category"""
-            res = exe(query=command, base=base)
+
     elif not multidict:
-        res = exe(query=command, base=base)
         result.clear()
+    res = storage.exe(query=command)
     # history
     if res:
         result.clear()
@@ -123,8 +125,8 @@ def stock():
         if new_added:
             all_id = [x[0] for x in result]
             if id_added not in all_id:
-                rec_added = exe(
-                    f"""SELECT * FROM zip WHERE id = {id_added}""", base=base
+                rec_added = storage.exe(
+                    f"""SELECT * FROM zip WHERE id = {id_added}""",
                 )[0]
                 string_correct = str_corr(str_in=rec_added, ind=len(result) + 1)
                 result_2 = [string_correct]
@@ -139,8 +141,8 @@ def stock():
         # суммирование значений некоторых столбцов
         summ_some_fields = {"summ": 0, "summ_sold": 0, "count_sold": 0}
         for field in summ_some_fields:
-            summ_some_fields[field] = exe(
-                f"""SELECT CAST(SUM({field}) AS INTEGER) FROM ({command})""", base=base
+            summ_some_fields[field] = storage.exe(
+                f"""SELECT CAST(SUM({field}) AS INTEGER) FROM ({command})""",
             )[0][0]
         app.extensions["summ_some_fields"] = summ_some_fields
 
@@ -178,7 +180,8 @@ def stock():
 
 @app.route("/change/<id>", methods=["GET", "POST"])
 def change(id):
-    base = app.extensions["base"]
+    storage: ControlDatabase = app.extensions["storage"]
+
     command = app.extensions.get("command")
     param_is_sorted = app.extensions.get("param_is_sorted")
     sel_record = app.extensions.get("sel_record")
@@ -191,37 +194,31 @@ def change(id):
         multidict.pop("csrf_token")
     # внесение изменений
     if len(multidict) == 1:
-        category, name = exe(
-            f"SELECT category, name FROM zip WHERE id = {id}", base=base
+        category, name = storage.exe(
+            f"SELECT category, name FROM zip WHERE id = {id}",
         )[0]
         if multidict.get("status"):
             res = multidict.get("status")
-            value_old = exe(f"SELECT status FROM zip WHERE id = {id}", base=base)[0][0]
+            value_old = storage.exe(f"SELECT status FROM zip WHERE id = {id}")[0][0]
             if isinstance(value_old, str):
                 value_old = value_old.rstrip().lstrip()
                 print(value_old)
-            exe(
-                query=f"""UPDATE zip SET `status` = '{res}' WHERE id = {id}""",
-                base=base,
-            )
+            storage.exe(query=f"""UPDATE zip SET `status` = '{res}' WHERE id = {id}""")
             logger.info(
                 f"Для {category} {name} изменен статус с '{value_old}' на '{res}'"
             )
             if res == "принято":
-                count_ordered = exe(
+                count_ordered = storage.exe(
                     query=f"""SELECT `count_ordered` FROM zip WHERE id = {id}""",
-                    base=base,
                 )[0][0]
-                count_old = exe(f"SELECT `count` FROM zip WHERE id = {id}", base=base)[
+                count_old = storage.exe(f"SELECT `count` FROM zip WHERE id = {id}")[0][
                     0
-                ][0]
-                exe(
+                ]
+                storage.exe(
                     query=f"""UPDATE zip SET `count_ordered` = 0 WHERE id = {id}""",
-                    base=base,
                 )
-                exe(
+                storage.exe(
                     query=f"""UPDATE zip SET `count` = `count` + {count_ordered} WHERE id = {id}""",
-                    base=base,
                 )
                 logger.info(
                     f"{category} {name}: <i>count_ordered</i> '{count_ordered}' => '0'"
@@ -233,9 +230,7 @@ def change(id):
             key_val = list(multidict.items())[0]
             res = key_val[1]
             field = key_val[0]
-            value_old = exe(f"SELECT `{field}` FROM zip WHERE id = {id}", base=base)[0][
-                0
-            ]
+            value_old = storage.exe(f"SELECT `{field}` FROM zip WHERE id = {id}")[0][0]
             if isinstance(value_old, str):
                 value_old = value_old.rstrip().lstrip()
             if res is not None:
@@ -253,7 +248,7 @@ def change(id):
                 ):
                     res = 0
                 query = f"""UPDATE zip SET `{field}` = ? WHERE id = {id}"""
-                exe(query=query, param=res, base=base)
+                storage.exe(query=query, param=res)
             if not res:
                 logger.info(f"Для {category} {name} поле <i>{field}</i> очищено")
             if res:
@@ -267,9 +262,9 @@ def change(id):
                 )
     # изменение R и C
     elif len(multidict) == 2:
-        category, name = exe(
-            f"SELECT category, name FROM zip WHERE id = {id}", base=base
-        )[0]
+        category, name = storage.exe(f"SELECT category, name FROM zip WHERE id = {id}")[
+            0
+        ]
         data = list(multidict.items())
         res_1 = data[0][1]
         name_1 = data[0][0]
@@ -277,10 +272,10 @@ def change(id):
         name_2 = data[1][0]
         if res_1 is not None:
             query = f"""UPDATE zip SET `{name_1}` = ? WHERE id = {id}"""
-            exe(query=query, param=res_1, base=base)
+            storage.exe(query=query, param=res_1)
         if res_2 is not None:
             query = f"""UPDATE zip SET `{name_2}` = ? WHERE id = {id}"""
-            exe(query=query, param=res_2, base=base)
+            storage.exe(query=query, param=res_2)
         logger.info(f"{category} {name}: <i>{name_1}</i> на {res_1} {res_2}")
     # реализация сортировки
     elif id in (
@@ -337,14 +332,16 @@ def change(id):
 
 @app.route("/add/<id>", methods=["POST"])
 def add(id):
-    base = app.extensions["base"]
+    storage: ControlDatabase = app.extensions["storage"]
 
     form_1 = PhotoForm()
     form_2 = ManualForm()
     if form_1.validate_on_submit():
-        load_file(base, f=form_1.photo.data, field="photo", rec_id=id)
+        query, name = load_file(f=form_1.photo.data, field="photo", rec_id=id)
+        storage.exe(query=query, param=name)
     elif form_2.validate_on_submit():
-        load_file(base, f=form_2.manual.data, field="manual", rec_id=id)
+        query, name = load_file(f=form_2.manual.data, field="manual", rec_id=id)
+        storage.exe(query=query, param=name)
 
     multidict = dict(request.form)
     multidict.pop("csrf_token")
@@ -353,7 +350,7 @@ def add(id):
     if category:
         multidict = dict(multidict)
         multidict.update({"category": category})
-        app.extensions["id_added"] = insert(names_dict=multidict, base=base)
+        app.extensions["id_added"] = storage.insert(names_dict=multidict)
         app.extensions["new_added"] = True
     return redirect("/")
 
