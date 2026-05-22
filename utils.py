@@ -97,3 +97,41 @@ def get_fields(base):
         )
     ]
     return result
+
+
+def initialize():
+    """Инициализация при запуске приложения/смене базы"""
+    from routes import Bases, app
+    base = app.extensions.get("base")
+    if base is None:
+        app.extensions["base"], base = [Bases.baren.value] * 2
+
+    print(f"Таблица {base}")
+
+    base_is_changed = app.extensions.get("base_is_changed")
+    fields_from_base = app.extensions.get("fields_from_base")
+
+    if fields_from_base is None or base_is_changed:
+        app.extensions["base_is_changed"] = False
+        app.extensions["fields_from_base"] = get_fields(base)
+
+    path_to_log = f"./profiles/{base}/{base}.log"
+    app.extensions["path_to_log"] = path_to_log
+    logging.basicConfig(
+        filename=path_to_log,
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+        datefmt="%d-%m-%Y %H:%M:%S %p",
+    )
+
+    app.extensions["fields_order_out"] = []
+    app.extensions["res"] = []
+    app.extensions["command"] = ""
+    app.extensions["command_2"] = ""
+    app.extensions["param_is_sorted"] = False
+    app.extensions["summ_some_fields"] = 0
+    app.extensions["format_cut"] = True
+    app.extensions["sel_record"] = 0
+    app.extensions["new_added"] = False
+    app.extensions["result"] = []
+    app.extensions["sort_asc"] = True
