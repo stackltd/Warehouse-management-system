@@ -1,6 +1,7 @@
 import logging
 
-from flask import Flask, request, render_template, redirect, g
+from flask import Flask, request, render_template, redirect, g, session
+from flask_caching import Cache
 from jinja2 import exceptions
 from flask_wtf.csrf import CSRFProtect
 from forms import ManualForm, PhotoForm
@@ -14,12 +15,41 @@ bases = [member.value for member in Bases]
 app = Flask(__name__)
 csrf = CSRFProtect(app)
 
+
+# Конфигурация Redis
+app.config["CACHE_TYPE"] = "RedisCache"
+app.config["CACHE_REDIS_HOST"] = "localhost"  # или IP-адрес твоего сервера Redis
+app.config["CACHE_REDIS_PORT"] = 6379
+app.config["CACHE_REDIS_DB"] = 0               # Номер базы данных в Redis (от 0 до 15)
+app.config["CACHE_DEFAULT_TIMEOUT"] = 300      # Время жизни кэша по умолчанию (в секундах)
+
+# Инициализируем кэш
+cache = Cache(app)
+
 app.logger.disabled = True
 
 log = logging.getLogger("werkzeug")
 log.disabled = True
 
 logger = logging.getLogger("логгер")
+
+
+
+def make_session_cache_key():
+    """
+    Генерирует уникальный ключ кэша на основе текущего URL
+    и уникального ID сессии пользователя.
+    """
+    # Берем полный путь с параметрами (например, /?заказы=on)
+    base_url = request.full_path
+
+    # Вытаскиваем какой-нибудь уникальный маркер пользователя из сессии.
+    # Если у тебя есть авторизация, это может быть session.get("user_id")
+    # Если авторизации нет, можно использовать сессионный кукиш или саму сессию
+    user_marker = request.cookies.get("session")  # _id генерируется Flask автоматически для сессии
+    print(user_marker)
+    # Собираем уникальную строку для Redis
+    return f"{base_url}//user:{user_marker}"
 
 
 @app.teardown_appcontext
@@ -29,7 +59,8 @@ def close_connection(exception):
         db.close()
 
 
-@app.route("/base_choose", methods=["POST"])
+@app.route("/base_choose")
+# @cache.cached(timeout=60, make_cache_key=make_session_cache_key)
 def base_choose():
     """
     Функция смены базы
@@ -37,7 +68,7 @@ def base_choose():
     """
 
     app.extensions["base_is_changed"] = True
-    base = request.form.get("base_name")
+    base = request.args.get("base_name")
     app.extensions["base"] = base
     path_to_log = f"./profiles/{base}/{base}.log"
     app.extensions["path_to_log"] = path_to_log
@@ -62,7 +93,10 @@ def base_choose():
     return redirect("/")
 
 
-@app.route("/", methods=["GET", "POST"])
+
+@app.route("/")
+# @cache.cached(timeout=20, query_string=True)  # Кэшировать эту страницу ровно на 60 секунд
+# @cache.cached(timeout=60, make_cache_key=make_session_cache_key)
 def stock():
     base = app.extensions["base"]
     storage: ControlDatabase = app.extensions["storage"]
@@ -82,7 +116,7 @@ def stock():
     )
     app.extensions["url_for_redirect_from_photo"] = url_for_redirect_from_photo
 
-    multidict = request.form
+    multidict = request.args
     # формат вывода полей - полный/сокращённый
     if multidict.get("format") is not None:
         format_cut = not format_cut
@@ -110,10 +144,12 @@ def stock():
             command = f"""SELECT * FROM zip WHERE status in ({', '.join([f"'{x}'" for x in statuses][:-1])}) ORDER BY history"""
         else:
             command = f"""SELECT * FROM zip WHERE category IN ({fields_str}) ORDER BY category"""
+        res = storage.exe(query=command)
+
 
     elif not multidict:
         result.clear()
-    res = storage.exe(query=command)
+        res = storage.exe(query=command)
     # history
     if res:
         result.clear()
@@ -356,7 +392,9 @@ def add(id):
 
 
 @app.route("/report")
+# @cache.cached(timeout=20)  # Кэшировать эту страницу ровно на 60 секунд
 def report():
+    print("report")
     path_to_log = app.extensions["path_to_log"]
 
     with open(path_to_log, "r") as obj:

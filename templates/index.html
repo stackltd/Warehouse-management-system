@@ -36,21 +36,11 @@
           <button class="btn-reset btn button_filter" type="submit">Добавить</button>
         </form>
           <!-- выбор формата -->
-        <form action="/" method="post" class="flex form_add form_format">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <form action="/" method="GET" class="flex form_add form_format">
           <button type="submit" value="1" name="format">финансы</button>
-          <!-- <fieldset>
-            <legend>формат</legend>
-            <input type="radio" checked name="format" value="0"> сокр
-            <label>
-              <input type="radio" name="format" value="1"> полн
-            </label>
-            <button class="btn-reset btn button_filter" type="submit">go</button>
-          </fieldset> -->
         </form>
           <!-- выбор категории -->
-        <form action="/" method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <form action="/" method="GET">
           <fieldset>
             <legend>категории</legend>
             <div class="send__wrapper flex">
@@ -74,8 +64,7 @@
         </form>
         <a href="/report" target="_blank" style="color: rgb(14, 28, 226);">Отчет</a>
         <!-- выбор базы -->
-        <form action="/base_choose" method="post" class="flex form_add" style="flex-direction: column; gap: 5px; align-items: center;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <form action="/base_choose" method="GET" class="flex form_add" style="flex-direction: column; gap: 5px; align-items: center;">
           <div class="flex">
             <select class="filter_select" name="base_name" id="field__select" required>
               {% for field in bases %}
