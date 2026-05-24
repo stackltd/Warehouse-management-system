@@ -1,7 +1,6 @@
 import logging
 
-from flask import Flask, request, render_template, redirect, g, session
-from flask_caching import Cache
+from flask import Flask, request, render_template, redirect, g
 from jinja2 import exceptions
 from flask_wtf.csrf import CSRFProtect
 from forms import ManualForm, PhotoForm
@@ -10,21 +9,10 @@ from models import ControlDatabase
 from config import Bases, SORT_DIRECT, SIZE_BLOCK
 from utils import str_corr, load_file, div_string, initialize
 
-bases = [member.value for member in Bases]
+bases = [member.name for member in Bases]
 
 app = Flask(__name__)
 csrf = CSRFProtect(app)
-
-
-# Конфигурация Redis
-app.config["CACHE_TYPE"] = "RedisCache"
-app.config["CACHE_REDIS_HOST"] = "localhost"  # или IP-адрес твоего сервера Redis
-app.config["CACHE_REDIS_PORT"] = 6379
-app.config["CACHE_REDIS_DB"] = 0               # Номер базы данных в Redis (от 0 до 15)
-app.config["CACHE_DEFAULT_TIMEOUT"] = 300      # Время жизни кэша по умолчанию (в секундах)
-
-# Инициализируем кэш
-cache = Cache(app)
 
 app.logger.disabled = True
 
@@ -34,24 +22,6 @@ log.disabled = True
 logger = logging.getLogger("логгер")
 
 
-
-def make_session_cache_key():
-    """
-    Генерирует уникальный ключ кэша на основе текущего URL
-    и уникального ID сессии пользователя.
-    """
-    # Берем полный путь с параметрами (например, /?заказы=on)
-    base_url = request.full_path
-
-    # Вытаскиваем какой-нибудь уникальный маркер пользователя из сессии.
-    # Если у тебя есть авторизация, это может быть session.get("user_id")
-    # Если авторизации нет, можно использовать сессионный кукиш или саму сессию
-    user_marker = request.cookies.get("session")  # _id генерируется Flask автоматически для сессии
-    print(user_marker)
-    # Собираем уникальную строку для Redis
-    return f"{base_url}//user:{user_marker}"
-
-
 @app.teardown_appcontext
 def close_connection(exception):
     db = getattr(g, "_database", None)
@@ -59,18 +29,19 @@ def close_connection(exception):
         db.close()
 
 
-@app.route("/base_choose")
-# @cache.cached(timeout=60, make_cache_key=make_session_cache_key)
-def base_choose():
+@app.route("/select_base")
+def select_base():
     """
     Функция смены базы
     :return:
     """
 
     app.extensions["base_is_changed"] = True
-    base = request.args.get("base_name")
+    base_name = request.args.get("base_name")
+    base = Bases[base_name]
     app.extensions["base"] = base
-    path_to_log = f"./profiles/{base}/{base}.log"
+    # print("base, base.name, base.value", base, base.name, base.value)
+    path_to_log = f"./profiles/{base.name}/{base.name}.log"
     app.extensions["path_to_log"] = path_to_log
 
     initialize()
@@ -93,13 +64,11 @@ def base_choose():
     return redirect("/")
 
 
-
 @app.route("/")
-# @cache.cached(timeout=20, query_string=True)  # Кэшировать эту страницу ровно на 60 секунд
-# @cache.cached(timeout=60, make_cache_key=make_session_cache_key)
 def stock():
-    base = app.extensions["base"]
+    base: Bases = app.extensions["base"]
     storage: ControlDatabase = app.extensions["storage"]
+    table = base.value
 
     res = app.extensions.get("res")
     command = app.extensions.get("command")
@@ -139,13 +108,12 @@ def stock():
         fields_list = [f"'{x}'" for x in multidict]
         fields_str = ", ".join(fields_list)
         if multidict.get("вывести всё"):
-            command = """SELECT * FROM zip ORDER BY category"""
+            command = f"""SELECT * FROM {table} ORDER BY category"""
         elif multidict.get("заказы"):
-            command = f"""SELECT * FROM zip WHERE status in ({', '.join([f"'{x}'" for x in statuses][:-1])}) ORDER BY history"""
+            command = f"""SELECT * FROM {table} WHERE status in ({', '.join([f"'{x}'" for x in statuses][:-1])}) ORDER BY history"""
         else:
-            command = f"""SELECT * FROM zip WHERE category IN ({fields_str}) ORDER BY category"""
+            command = f"""SELECT * FROM {table} WHERE category IN ({fields_str}) ORDER BY category"""
         res = storage.exe(query=command)
-
 
     elif not multidict:
         result.clear()
@@ -162,7 +130,7 @@ def stock():
             all_id = [x[0] for x in result]
             if id_added not in all_id:
                 rec_added = storage.exe(
-                    f"""SELECT * FROM zip WHERE id = {id_added}""",
+                    f"""SELECT * FROM {table} WHERE id = {id_added}""",
                 )[0]
                 string_correct = str_corr(str_in=rec_added, ind=len(result) + 1)
                 result_2 = [string_correct]
@@ -195,7 +163,7 @@ def stock():
         sel_record=sel_record,
         fields=fields,
         bases=bases,
-        base=base,
+        base=base.name,
         message=["none", ""],
     )
     try:
@@ -205,18 +173,21 @@ def stock():
         print(f"{ex = }")
         sel_record = 0
         message = f"Ошибка в имени поля! Внесите в файле fields.py в fields поле {str(ex).split('attribute')[-1]}"
+        context["sel_record"] = 0
         context["message"] = ["inline-block", message]
+        return render_template(**context)
     finally:
         app.extensions["res"] = res
         app.extensions["command"] = command
         app.extensions["sel_record"] = sel_record
         app.extensions["result"] = result
-        return render_template(**context)
 
 
 @app.route("/change/<id>", methods=["GET", "POST"])
 def change(id):
     storage: ControlDatabase = app.extensions["storage"]
+    base: Bases = app.extensions["base"]
+    table = base.value
 
     command = app.extensions.get("command")
     param_is_sorted = app.extensions.get("param_is_sorted")
@@ -224,139 +195,151 @@ def change(id):
     sort_asc = app.extensions.get("sort_asc")
     command_2 = app.extensions.get("command_2")
 
-    multidict = dict(request.form)
-    # удаляем csrf_token из multidict
-    if multidict:
-        multidict.pop("csrf_token")
-    # внесение изменений
-    if len(multidict) == 1:
-        category, name = storage.exe(
-            f"SELECT category, name FROM zip WHERE id = {id}",
-        )[0]
-        if multidict.get("status"):
-            res = multidict.get("status")
-            value_old = storage.exe(f"SELECT status FROM zip WHERE id = {id}")[0][0]
-            if isinstance(value_old, str):
-                value_old = value_old.rstrip().lstrip()
-                print(value_old)
-            storage.exe(query=f"""UPDATE zip SET `status` = '{res}' WHERE id = {id}""")
-            logger.info(
-                f"Для {category} {name} изменен статус с '{value_old}' на '{res}'"
-            )
-            if res == "принято":
-                count_ordered = storage.exe(
-                    query=f"""SELECT `count_ordered` FROM zip WHERE id = {id}""",
-                )[0][0]
-                count_old = storage.exe(f"SELECT `count` FROM zip WHERE id = {id}")[0][
-                    0
-                ]
-                storage.exe(
-                    query=f"""UPDATE zip SET `count_ordered` = 0 WHERE id = {id}""",
-                )
-                storage.exe(
-                    query=f"""UPDATE zip SET `count` = `count` + {count_ordered} WHERE id = {id}""",
-                )
-                logger.info(
-                    f"{category} {name}: <i>count_ordered</i> '{count_ordered}' => '0'"
-                )
-                logger.info(
-                    f"{category} {name}: <i>count</i> '{count_old}' => '{count_old + count_ordered}'"
-                )
-        else:
-            key_val = list(multidict.items())[0]
-            res = key_val[1]
-            field = key_val[0]
-            value_old = storage.exe(f"SELECT `{field}` FROM zip WHERE id = {id}")[0][0]
-            if isinstance(value_old, str):
-                value_old = value_old.rstrip().lstrip()
-            if res is not None:
-                if (
-                    field
-                    in (
-                        "count",
-                        "price_market",
-                        "price_deliv",
-                        "count_ordered",
-                        "price_sale",
-                        "count_sold",
-                    )
-                    and not res
-                ):
-                    res = 0
-                query = f"""UPDATE zip SET `{field}` = ? WHERE id = {id}"""
-                storage.exe(query=query, param=res)
-            if not res:
-                logger.info(f"Для {category} {name} поле <i>{field}</i> очищено")
-            if res:
-                if field == "market":
-                    field = "расписка"
-                elif field == "history":
-                    field = "дата"
-                # print("logger")
-                logger.info(
-                    f"{category} {name}: <i>{field}</i> '{value_old}' => '{res}'"
-                )
-    # изменение R и C
-    elif len(multidict) == 2:
-        category, name = storage.exe(f"SELECT category, name FROM zip WHERE id = {id}")[
-            0
-        ]
-        data = list(multidict.items())
-        res_1 = data[0][1]
-        name_1 = data[0][0]
-        res_2 = data[1][1]
-        name_2 = data[1][0]
-        if res_1 is not None:
-            query = f"""UPDATE zip SET `{name_1}` = ? WHERE id = {id}"""
-            storage.exe(query=query, param=res_1)
-        if res_2 is not None:
-            query = f"""UPDATE zip SET `{name_2}` = ? WHERE id = {id}"""
-            storage.exe(query=query, param=res_2)
-        logger.info(f"{category} {name}: <i>{name_1}</i> на {res_1} {res_2}")
     # реализация сортировки
-    elif id in (
-        "id",
-        "category",
-        "type",
-        "name",
-        "size",
-        "case",
-        "for",
-        "U",
-        "I",
-        "R",
-        "C",
-        "P",
-        "count",
-        "status",
-        "history",
-        "market",
-    ):
-        sel_record = 0  # сброс режима изменения строки
-        # other = ", U ASC, I ASC" if id in ("size", "case") else ""
-        if id in ("size", "case"):
-            other = ", U ASC, I ASC"
-        elif id == "U":
-            other = ", C ASC"
-        else:
-            other = ""
+    if request.method == "GET":
+        if id in (
+            "id",
+            "category",
+            "type",
+            "name",
+            "size",
+            "case",
+            "for",
+            "U",
+            "I",
+            "R",
+            "C",
+            "P",
+            "count",
+            "status",
+            "history",
+            "market",
+        ):
+            sel_record = 0  # сброс режима изменения строки
+            # other = ", U ASC, I ASC" if id in ("size", "case") else ""
+            if id in ("size", "case"):
+                other = ", U ASC, I ASC"
+            elif id == "U":
+                other = ", C ASC"
+            else:
+                other = ""
 
-        if not param_is_sorted:
-            command_2 = command
-            command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
-            sort_asc = not sort_asc
-            app.extensions["param_is_sorted"] = True
+            if not param_is_sorted:
+                command_2 = command
+                command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
+                sort_asc = not sort_asc
+                app.extensions["param_is_sorted"] = True
 
-        else:
-            command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
-            sort_asc = not sort_asc
-    elif id.isdigit():
-        app.extensions["new_added"] = False
-        # разрешаем изменение строки с номером id. sel_record передается через / в html
-        if sel_record == 0 or sel_record != int(id):
-            sel_record = int(id)
-        else:
-            sel_record = 0
+            else:
+                command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
+                sort_asc = not sort_asc
+        elif id.isdigit():
+            app.extensions["new_added"] = False
+            # разрешаем изменение строки с номером id. sel_record передается через / в html
+            if sel_record == 0 or sel_record != int(id):
+                sel_record = int(id)
+            else:
+                sel_record = 0
+
+    if request.method == "POST":
+        if not id.isdigit():
+            return redirect("/")
+
+        multidict = dict(request.form)
+        # удаляем csrf_token из multidict
+        if multidict:
+            multidict.pop("csrf_token")
+        # внесение изменений
+        if len(multidict) == 1:
+            category, name = storage.exe(
+                f"SELECT category, name FROM {table} WHERE id = {id}",
+            )[0]
+            if multidict.get("status"):
+                res = multidict.get("status")
+                value_old = storage.exe(f"SELECT status FROM {table} WHERE id = {id}")[
+                    0
+                ][0]
+                if isinstance(value_old, str):
+                    value_old = value_old.rstrip().lstrip()
+                    print(value_old)
+                storage.exe(
+                    query=f"""UPDATE {table} SET `status` = '{res}' WHERE id = {id}"""
+                )
+                logger.info(
+                    f"Для {category} {name} изменен статус с '{value_old}' на '{res}'"
+                )
+                if res == "принято":
+                    count_ordered = storage.exe(
+                        query=f"""SELECT `count_ordered` FROM {table} WHERE id = {id}""",
+                    )[0][0]
+                    count_old = storage.exe(
+                        f"SELECT `count` FROM {table} WHERE id = {id}"
+                    )[0][0]
+                    storage.exe(
+                        query=f"""UPDATE {table} SET `count_ordered` = 0 WHERE id = {id}""",
+                    )
+                    storage.exe(
+                        query=f"""UPDATE {table} SET `count` = `count` + {count_ordered} WHERE id = {id}""",
+                    )
+                    logger.info(
+                        f"{category} {name}: <i>count_ordered</i> '{count_ordered}' => '0'"
+                    )
+                    logger.info(
+                        f"{category} {name}: <i>count</i> '{count_old}' => '{count_old + count_ordered}'"
+                    )
+            else:
+                key_val = list(multidict.items())[0]
+                res = key_val[1]
+                field = key_val[0]
+                value_old = storage.exe(
+                    f"SELECT `{field}` FROM {table} WHERE id = {id}"
+                )[0][0]
+                if isinstance(value_old, str):
+                    value_old = value_old.rstrip().lstrip()
+                if res is not None:
+                    if (
+                        field
+                        in (
+                            "count",
+                            "price_market",
+                            "price_deliv",
+                            "count_ordered",
+                            "price_sale",
+                            "count_sold",
+                        )
+                        and not res
+                    ):
+                        res = 0
+                    query = f"""UPDATE {table} SET `{field}` = ? WHERE id = {id}"""
+                    storage.exe(query=query, param=res)
+                if not res:
+                    logger.info(f"Для {category} {name} поле <i>{field}</i> очищено")
+                if res:
+                    if field == "market":
+                        field = "расписка"
+                    elif field == "history":
+                        field = "дата"
+                    # print("logger")
+                    logger.info(
+                        f"{category} {name}: <i>{field}</i> '{value_old}' => '{res}'"
+                    )
+        # изменение R и C
+        elif len(multidict) == 2:
+            category, name = storage.exe(
+                f"SELECT category, name FROM {table} WHERE id = {id}"
+            )[0]
+            data = list(multidict.items())
+            res_1 = data[0][1]
+            name_1 = data[0][0]
+            res_2 = data[1][1]
+            name_2 = data[1][0]
+            if res_1 is not None:
+                query = f"""UPDATE {table} SET `{name_1}` = ? WHERE id = {id}"""
+                storage.exe(query=query, param=res_1)
+            if res_2 is not None:
+                query = f"""UPDATE {table} SET `{name_2}` = ? WHERE id = {id}"""
+                storage.exe(query=query, param=res_2)
+            logger.info(f"{category} {name}: <i>{name_1}</i> на {res_1} {res_2}")
 
     app.extensions["command"] = command
     app.extensions["command_2"] = command_2
@@ -392,7 +375,6 @@ def add(id):
 
 
 @app.route("/report")
-# @cache.cached(timeout=20)  # Кэшировать эту страницу ровно на 60 секунд
 def report():
     print("report")
     path_to_log = app.extensions["path_to_log"]

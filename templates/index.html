@@ -64,7 +64,7 @@
         </form>
         <a href="/report" target="_blank" style="color: rgb(14, 28, 226);">Отчет</a>
         <!-- выбор базы -->
-        <form action="/base_choose" method="GET" class="flex form_add" style="flex-direction: column; gap: 5px; align-items: center;">
+        <form action="/select_base" method="GET" class="flex form_add" style="flex-direction: column; gap: 5px; align-items: center;">
           <div class="flex">
             <select class="filter_select" name="base_name" id="field__select" required>
               {% for field in bases %}

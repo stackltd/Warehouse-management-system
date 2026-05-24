@@ -103,21 +103,21 @@ def initialize():
     """Инициализация при запуске приложения/смене базы"""
     from routes import Bases, app
 
-    base = app.extensions.get("base")
+    base: Bases = app.extensions.get("base")
     if base is None:
-        app.extensions["base"], base = [Bases.baren.value] * 2
-    app.extensions["storage"] = ControlDatabase(base)
+        app.extensions["base"], base = [Bases.baren] * 2
+    app.extensions["storage"] = ControlDatabase(base.name)
 
-    print(f"Таблица {base}")
+    print(f"База {base.name}. Таблица {base.value}")
 
     base_is_changed = app.extensions.get("base_is_changed")
     fields_from_base = app.extensions.get("fields_from_base")
 
     if fields_from_base is None or base_is_changed:
         app.extensions["base_is_changed"] = False
-        app.extensions["fields_from_base"] = get_fields(base)
+        app.extensions["fields_from_base"] = get_fields(base.name)
 
-    path_to_log = f"./profiles/{base}/{base}.log"
+    path_to_log = f"./profiles/{base.name}/{base.name}.log"
     app.extensions["path_to_log"] = path_to_log
     logging.basicConfig(
         filename=path_to_log,

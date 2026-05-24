@@ -1,13 +1,15 @@
-from enum import Enum
+from aenum import Enum, NoAlias
 
 
 class Bases(Enum):
-    baren = "baren"
+    _settings_ = NoAlias  # <-- Запрещаем Python склеивать дубликаты!
+
+    baren = "warehouse"
     python = "python"
-    pharmacy = "pharmacy"
+    pharmacy = "warehouse"
     kroko = "kroko"
-    test = "test"
-    shaman = "shaman"
+    test = "warehouse"
+    shaman = "warehouse"
 
 
 SORT_DIRECT = {True: "ASC", False: "DESC"}

@@ -11,6 +11,9 @@ class ControlDatabase:
     def __init__(self, base):
         self.base = base
 
+    def __str__(self):
+        return f"{self.base}"
+
     def _get_db(self):
         """
         Создание соединения с базой данных для текущего контекста приложения, создание дескриптора базы данных,
