@@ -183,72 +183,79 @@ def stock():
         app.extensions["result"] = result
 
 
+@app.route("/sorting/<id>")
+def sorting(id):
+    """Сортировка столбца по параметру"""
+    param_is_sorted = app.extensions.get("param_is_sorted")
+    command = app.extensions.get("command")
+    command_2 = app.extensions.get("command_2")
+    sort_asc = app.extensions.get("sort_asc")
+
+    if id in (
+        "id",
+        "category",
+        "type",
+        "name",
+        "size",
+        "case",
+        "for",
+        "U",
+        "I",
+        "R",
+        "C",
+        "P",
+        "count",
+        "status",
+        "history",
+        "market",
+    ):
+        app.extensions["sel_record"] = 0
+        # сброс режима изменения строки
+        if id in ("size", "case"):
+            other = ", U ASC, I ASC"
+        elif id == "U":
+            other = ", C ASC"
+        else:
+            other = ""
+
+        if not param_is_sorted:
+            command_2 = command
+            command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
+            sort_asc = not sort_asc
+            app.extensions["param_is_sorted"] = True
+
+        else:
+            command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
+            sort_asc = not sort_asc
+
+    app.extensions["command"] = command
+    app.extensions["command_2"] = command_2
+    app.extensions["sort_asc"] = sort_asc
+
+    return redirect("/")
+
+
 @app.route("/change/<id>", methods=["GET", "POST"])
 def change(id):
+    """Изменение строки после вхождения в режим изменения"""
     storage: ControlDatabase = app.extensions["storage"]
     base: Bases = app.extensions["base"]
     table = base.value
 
-    command = app.extensions.get("command")
-    param_is_sorted = app.extensions.get("param_is_sorted")
-    sel_record = app.extensions.get("sel_record")
-    sort_asc = app.extensions.get("sort_asc")
-    command_2 = app.extensions.get("command_2")
+    # вход в режим изменения строки
+    if id.isdigit() and request.method == "GET":
+        sel_record = app.extensions.get("sel_record")
+        app.extensions["new_added"] = False
+        # разрешаем изменение строки с номером id. sel_record передается через / в html
+        if sel_record == 0 or sel_record != int(id):
+            sel_record = int(id)
+        else:
+            sel_record = 0
+        app.extensions["sel_record"] = sel_record
 
-    # реализация сортировки
-    if request.method == "GET":
-        if id in (
-            "id",
-            "category",
-            "type",
-            "name",
-            "size",
-            "case",
-            "for",
-            "U",
-            "I",
-            "R",
-            "C",
-            "P",
-            "count",
-            "status",
-            "history",
-            "market",
-        ):
-            sel_record = 0  # сброс режима изменения строки
-            # other = ", U ASC, I ASC" if id in ("size", "case") else ""
-            if id in ("size", "case"):
-                other = ", U ASC, I ASC"
-            elif id == "U":
-                other = ", C ASC"
-            else:
-                other = ""
-
-            if not param_is_sorted:
-                command_2 = command
-                command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
-                sort_asc = not sort_asc
-                app.extensions["param_is_sorted"] = True
-
-            else:
-                command = f"""SELECT * FROM ({command_2}) ORDER BY `{id}` {SORT_DIRECT[sort_asc]}{other}"""
-                sort_asc = not sort_asc
-        elif id.isdigit():
-            app.extensions["new_added"] = False
-            # разрешаем изменение строки с номером id. sel_record передается через / в html
-            if sel_record == 0 or sel_record != int(id):
-                sel_record = int(id)
-            else:
-                sel_record = 0
-
-    if request.method == "POST":
-        if not id.isdigit():
-            return redirect("/")
-
+    elif request.method == "POST":
         multidict = dict(request.form)
-        # удаляем csrf_token из multidict
-        if multidict:
-            multidict.pop("csrf_token")
+        multidict.pop("csrf_token")
         # внесение изменений
         if len(multidict) == 1:
             category, name = storage.exe(
@@ -340,26 +347,22 @@ def change(id):
                 query = f"""UPDATE {table} SET `{name_2}` = ? WHERE id = {id}"""
                 storage.exe(query=query, param=res_2)
             logger.info(f"{category} {name}: <i>{name_1}</i> на {res_1} {res_2}")
-
-    app.extensions["command"] = command
-    app.extensions["command_2"] = command_2
-    app.extensions["sel_record"] = sel_record
-    app.extensions["sort_asc"] = sort_asc
-
     return redirect("/")
 
 
 @app.route("/add/<id>", methods=["POST"])
 def add(id):
     storage: ControlDatabase = app.extensions["storage"]
+    base: Bases = app.extensions["base"]
+    table = base.value
 
     form_1 = PhotoForm()
     form_2 = ManualForm()
     if form_1.validate_on_submit():
-        query, name = load_file(f=form_1.photo.data, field="photo", rec_id=id)
+        query, name = load_file(table, f=form_1.photo.data, field="photo", rec_id=id)
         storage.exe(query=query, param=name)
     elif form_2.validate_on_submit():
-        query, name = load_file(f=form_2.manual.data, field="manual", rec_id=id)
+        query, name = load_file(table, f=form_2.manual.data, field="manual", rec_id=id)
         storage.exe(query=query, param=name)
 
     multidict = dict(request.form)

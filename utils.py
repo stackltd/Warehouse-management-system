@@ -70,7 +70,7 @@ def div_string(string_all, size_block):
     return list_strings
 
 
-def load_file(f, field, rec_id, folder=""):
+def load_file(table, f, field, rec_id, folder=""):
     filename = f.filename
     # print(filename)
     latin = transliterate.translit(filename, "ru", reversed=True)
@@ -78,7 +78,7 @@ def load_file(f, field, rec_id, folder=""):
     # latin = unidecode(filename)
     name = secure_filename(latin)
     f.save(os.path.join("static", "files", f"{folder}", name))
-    query = f"""UPDATE zip SET `{field}` = ? WHERE id = {rec_id}"""
+    query = f"""UPDATE {table} SET `{field}` = ? WHERE id = {rec_id}"""
     return query, name
 
 
