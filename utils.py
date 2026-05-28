@@ -4,6 +4,7 @@ import logging
 import os
 
 import transliterate
+from flask import session
 from werkzeug.utils import secure_filename
 
 from models import ControlDatabase
@@ -101,24 +102,21 @@ def get_fields(base):
 
 def initialize():
     """Инициализация при запуске приложения/смене базы"""
-    from routes import Bases, app
 
-    base: Bases = app.extensions.get("base")
-    if base is None:
-        app.extensions["base"], base = [Bases.baren] * 2
-    app.extensions["storage"] = ControlDatabase(base.name)
+    base = session.get("base", "baren")
+    session["base"] = base
+    print(base)
 
-    print(f"База {base.name}. Таблица {base.value}")
-
-    base_is_changed = app.extensions.get("base_is_changed")
-    fields_from_base = app.extensions.get("fields_from_base")
+    base_is_changed = session.get("base_is_changed")
+    fields_from_base = session.get("fields_from_base")
 
     if fields_from_base is None or base_is_changed:
-        app.extensions["base_is_changed"] = False
-        app.extensions["fields_from_base"] = get_fields(base.name)
+        session["base_is_changed"] = False
+        fields_from_base_dumps = json.dumps(get_fields(base))
+        session["fields_from_base"] = fields_from_base_dumps
 
-    path_to_log = f"./profiles/{base.name}/{base.name}.log"
-    app.extensions["path_to_log"] = path_to_log
+    path_to_log = f"./profiles/{base}/{base}.log"
+    session["path_to_log"] = path_to_log
     logging.basicConfig(
         filename=path_to_log,
         level=logging.INFO,
@@ -126,14 +124,14 @@ def initialize():
         datefmt="%d-%m-%Y %H:%M:%S %p",
     )
 
-    app.extensions["fields_order_out"] = []
-    app.extensions["res"] = []
-    app.extensions["command"] = ""
-    app.extensions["command_2"] = ""
-    app.extensions["param_is_sorted"] = False
-    app.extensions["summ_some_fields"] = 0
-    app.extensions["format_cut"] = True
-    app.extensions["sel_record"] = 0
-    app.extensions["new_added"] = False
-    app.extensions["result"] = []
-    app.extensions["sort_asc"] = True
+    session["fields_order_out"] = []
+    session["res"] = []
+    session["command"] = ""
+    session["command_2"] = ""
+    session["param_is_sorted"] = False
+    session["summ_some_fields"] = 0
+    session["format_cut"] = True
+    session["sel_record"] = 0
+    session["new_added"] = False
+    session["result"] = []
+    session["sort_asc"] = True
