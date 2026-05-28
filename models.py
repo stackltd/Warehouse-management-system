@@ -13,25 +13,20 @@ logger = logging.getLogger("логгер.models")
 
 class ControlDatabase:
 
-    def __init__(self, base):
-        self.base = base
-
-    def __str__(self):
-        return f"{self.base}"
-
-    def _get_db(self):
+    def _get_db(self, base):
         """
         Создание соединения с базой данных для текущего контекста приложения, создание дескриптора базы данных,
          которое можно использовать во всех методах
         """
         db = getattr(g, "_database", None)
         if db is None:
-            db = g._database = sqlite3.connect(f"databases/{self.base}.db")
+            db = g._database = sqlite3.connect(f"databases/{base}.db")
         return db
 
-    def create_table(self, table):
-        # print("create_table(base)", base)
-        with sqlite3.connect(f"databases/{self.base}.db") as conn:
+    @staticmethod
+    def create_table(base):
+        table = Bases[base]
+        with sqlite3.connect(f"databases/{base}.db") as conn:
             cursor = conn.cursor()
             query_create_table = f"""CREATE TABLE IF NOT EXISTS {table} (
                                     id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -68,13 +63,15 @@ class ControlDatabase:
             cursor.execute(query_create_table)
             conn.commit()
 
-    def insert(self, table, names_dict):
+    def insert(self, base, names_dict):
+        table = Bases[base]
         keys = ", ".join([f'"{name}"' for name in names_dict])
         values = ", ".join([f"{names_dict[name]}" for name in names_dict])
         # используем параметризованные запросы
         params = values.split(", ")
         ques_marks = ", ".join(["?" for _ in range(len(params))])
-        conn = self._get_db()
+        conn = self._get_db(base)
+
         cursor = conn.cursor()
         query = f"""INSERT INTO {table} ({keys}) VALUES ({ques_marks});"""
         logger.info(f"Добавлена позиция {values}")
@@ -82,8 +79,8 @@ class ControlDatabase:
         conn.commit()
         return cursor.lastrowid
 
-    def update(self, query="", param=None):
-        conn = self._get_db()
+    def update(self, base, query="", param=None):
+        conn = self._get_db(base)
         try:
             cursor = conn.cursor()
             if param is not None:
@@ -99,6 +96,7 @@ class ControlDatabase:
 
     def select(
         self,
+        base,
         query="",
         table="",
         fields="*",
@@ -108,11 +106,11 @@ class ControlDatabase:
         debug=False,
     ):
         if debug:
-            with sqlite3.connect(f"./databases/{self.base}.db") as obj:
+            with sqlite3.connect(f"./databases/{base}.db") as obj:
                 conn = obj
         else:
-            conn = self._get_db()
-        if not query:
+            conn = self._get_db(base)
+        if not query and table:
             query = f"SELECT {fields} FROM {table} WHERE {where} ORDER BY {order_by}"
         # print(query)
         try:
@@ -121,32 +119,19 @@ class ControlDatabase:
 
             result = cursor.fetchall()
             return result
-        except OperationalError as ex:
+        except OperationalError:
             return []
-
-    def to_json(self):
-        return json.dumps(self.__dict__)
-
-    @classmethod
-    def from_json(cls, json_str):
-        data = json.loads(json_str)
-        return cls(**data)
 
 
 if __name__ == "__main__":
     from config import Bases
 
     base = "baren"
-    asd = ControlDatabase(base)
+    asd = ControlDatabase()
     res = asd.select(
-        table=Bases[base],
-        fields="id, `count`, name",
-        param=(20, 15),
-        where="`id` <= ? AND `count` <= ?",
-        order_by="`count` ASC",
+        base="baren",
+        query="",
         debug=True,
     )
-    # for i in res:
-    #     print(i)
-    print(asd.to_json())
-    print(asd.from_json(asd.to_json()))
+    for i in res:
+        print(i)

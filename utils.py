@@ -7,6 +7,7 @@ import transliterate
 from flask import session
 from werkzeug.utils import secure_filename
 
+from config import Bases
 from models import ControlDatabase
 
 
@@ -105,7 +106,7 @@ def initialize():
 
     base = session.get("base", "baren")
     session["base"] = base
-    print(base)
+    print(f"База {base}, таблица {Bases[base]}")
 
     base_is_changed = session.get("base_is_changed")
     fields_from_base = session.get("fields_from_base")
