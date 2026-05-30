@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # 3. Глушим лишние логи (как ты делал для Waitress/Werkzeug)
     app.logger.disabled = True
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    # log = logging.getLogger("werkzeug")
+    log = logging.getLogger("werkzeug")
     # log.disabled = True
 
     # app.config["WTF_CSRF_ENABLED"] = False

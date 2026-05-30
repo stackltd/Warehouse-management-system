@@ -24,7 +24,7 @@
       <div class="add_new_record flex">
         <h3 style="margin: 0; color: rgb(57, 100, 217);" > {{ base }} </h3>
         <!-- добавление новой позиции -->
-        <form action="/add/0" method="post" class="flex form_add">
+        <form action="/add_record/" method="post" class="flex form_add">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="flex">
             <select class="filter_select" name="category" id="field__select">
@@ -161,7 +161,7 @@
           {% elif key == "photo" %}
             <div class="title {{ key }} flex">
               {% if res[0] == sel_record %}
-              <form action="/add/{{ res[0] }}" method="post" enctype="multipart/form-data" class="title {{ key }} flex scrollhere">
+              <form action="/add_file/{{ res[0] }}" method="post" enctype="multipart/form-data" class="title {{ key }} flex scrollhere">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <label class="input-file">
                   <input type="file" name="photo" accept=".png, .jpg, .txt" required>
@@ -192,7 +192,7 @@
           {% elif key == "manual" %}
             <div class="title {{ key }} flex">
               {% if res[0] == sel_record %}
-              <form action="/add/{{ res[0] }}" method="post" enctype="multipart/form-data" class="title {{ key }} flex scrollhere">
+              <form action="/add_file/{{ res[0] }}" method="post" enctype="multipart/form-data" class="title {{ key }} flex scrollhere">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <label class="input-file">
                   <input type="file" name="manual" accept=".pdf, .rar" required>

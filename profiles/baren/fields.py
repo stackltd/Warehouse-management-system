@@ -3,7 +3,7 @@ import json
 fields = {
     "Конденсатор": {
         "case": ["smd", "coaxial"],
-        "coeff": ["μF", "nF", "pF"],
+        "coeff": ["mkF", "nF", "pF"],
         "type": ["электролит.", "керам.", "тверд."],
     },
     "Резистор": {"case": ["smd", "coaxial"], "coeff": ["Ом", "кОм", "МОм"]},

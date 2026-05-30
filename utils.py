@@ -3,12 +3,12 @@ import json
 import logging
 import os
 
+import redis
 import transliterate
 from flask import session
 from werkzeug.utils import secure_filename
 
 from config import Bases
-from models import ControlDatabase
 
 
 def str_corr(str_in, ind):
@@ -74,10 +74,7 @@ def div_string(string_all, size_block):
 
 def load_file(table, f, field, rec_id, folder=""):
     filename = f.filename
-    # print(filename)
     latin = transliterate.translit(filename, "ru", reversed=True)
-    # Или unidecode (без установки transliterate)
-    # latin = unidecode(filename)
     name = secure_filename(latin)
     f.save(os.path.join("static", "files", f"{folder}", name))
     query = f"""UPDATE {table} SET `{field}` = ? WHERE id = {rec_id}"""
@@ -136,3 +133,20 @@ def initialize():
     session["new_added"] = False
     session["result"] = []
     session["sort_asc"] = True
+
+
+def clear_redis_cache():
+    """Сброс данных в redis"""
+    # Инициализируем подключение к Redis
+    redis_client = redis.Redis(host="localhost", port=6379, db=0)
+    print("⚠️ Сервер останавливается! Очищаю кэш Redis...")
+    try:
+        # Вариант А: Очистить ВООБЩЕ ВСЁ в текущей базе данных Redis
+        # redis_client.flushdb()
+        # Вариант Б: Если нужно удалить только определенные ключи (например, сессии)
+        keys = redis_client.keys("session:*")
+        if keys:
+            redis_client.delete(*keys)
+        print("✅ Кэш Redis успешно очищен.")
+    except Exception as e:
+        print(f"❌ Не удалось очистить Redis при закрытии: {e}")
