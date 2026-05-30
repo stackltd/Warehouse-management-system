@@ -33,4 +33,5 @@ query_create_table = """CREATE TABLE IF NOT EXISTS warehouse (
 
 if __name__ == "__main__":
     from models import ControlDatabase
+
     ControlDatabase().create_table("baren", query_create_table)

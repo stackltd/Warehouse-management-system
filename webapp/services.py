@@ -48,7 +48,10 @@ class Service:
         logger.setLevel(logging.INFO)
 
     def get_fields_for_render(self) -> dict:
-        base = session["base"]
+        base = session.get("base")
+        if base is None:
+            raise ValueError("Не выбрана база")
+
         table = Bases[base]
         res = session.get("res")
         command = session.get("command")
@@ -65,6 +68,7 @@ class Service:
             json.loads(fields_from_base)
         )
         session["url_for_redirect_from_photo"] = url_for_redirect_from_photo
+        session["statuses"] = statuses
 
         multidict = request.args
         # формат вывода полей - полный/сокращённый
@@ -208,8 +212,6 @@ class Service:
         base = session["base"]
         table = Bases[base]
         multidict.pop("csrf_token")
-        # внесение изменений
-
         # изменение R и C
         if multidict.keys() & {"R", "C"}:
             category, name = self.db.select(
@@ -235,7 +237,7 @@ class Service:
             )[0]
             if multidict.get("status"):
                 status = multidict.get("status")
-                statuses = session["fields_from_base"][3]
+                statuses = session["statuses"]
                 if status not in statuses:
                     return
                 value_old = self.db.select(
@@ -243,7 +245,6 @@ class Service:
                 )[0][0]
                 if isinstance(value_old, str):
                     value_old = value_old.rstrip().lstrip()
-                    print(value_old)
                 self.db.update(
                     base=base,
                     query=f"""UPDATE {table} SET `status` = '{status}' WHERE id = {id}""",
@@ -305,14 +306,15 @@ class Service:
                         field = "расписка"
                     elif field == "history":
                         field = "дата"
-                    # print("logger")
                     logger.info(
                         f"{category} {name}: <i>{field}</i> '{value_old}' => '{res}'"
                     )
 
     def add_new_record(self, multidict):
         multidict.pop("csrf_token")
-        base = session["base"]
+        base = session.get("base")
+        if base is None:
+            return
         category = multidict.get("category")
 
         if category:
@@ -339,7 +341,9 @@ class Service:
             self.db.update(base=base, query=query, param=name)
 
     def report(self):
-        path_to_log = session["path_to_log"]
+        path_to_log = session.get("path_to_log")
+        if path_to_log is None:
+            return "Нет данных"
 
         with open(path_to_log, "r") as obj:
             text = obj.read()
@@ -352,5 +356,4 @@ class Service:
             else:
                 text_list.append(string)
         text = "\n".join(text_list)
-        result = f"<pre style='font-size: 25; background-color: #ebeef2;'>{text}</pre>"
-        return result
+        return text

@@ -1,10 +1,10 @@
 import atexit
 from flask import render_template, redirect, g, session, Blueprint, request
-from jinja2 import exceptions
 
 from models import ControlDatabase
 from services import Service
 from utils import initialize, clear_redis_cache
+from webapp.config import Bases
 
 bp = Blueprint("main", __name__)
 
@@ -19,6 +19,7 @@ service = Service(db)
 
 @bp.teardown_app_request
 def close_connection(exception):
+    """Соединение с базой только в момент обращения к ней в запросе."""
     db = getattr(g, "_database", None)
     if db is not None:
         db.close()
@@ -26,6 +27,7 @@ def close_connection(exception):
 
 @bp.before_request
 def setup_user_session():
+    """Инициализация контекста, логирования при запуске приложения"""
     if session.get("base") is None:
         initialize()
 
@@ -47,14 +49,15 @@ def select_base():
 @bp.route("/")
 def stock():
     """Рендеринг полей"""
-    context = service.get_fields_for_render()
     try:
+        context = service.get_fields_for_render()
         return render_template(**context)
-    except exceptions.UndefinedError as ex:
-        message = f"Ошибка в имени поля! Внесите в файле fields.py в fields поле {str(ex).split('attribute')[-1]}"
-        context["sel_record"], session["sel_record"] = 0, 0
-        context["message"] = message
-        return render_template(**context)
+    except ValueError:
+        return render_template(
+            template_name_or_list="index.html",
+            bases=[base_name for base_name in Bases],
+            message=["inline-block", "Выберите базу"],
+        )
 
 
 @bp.route("/sorting/<id>")
@@ -97,7 +100,10 @@ def add_file(id):
 
 @bp.route("/report")
 def report():
-    return service.report()
+    """История изменений в базе"""
+    text = service.report()
+    html = f"<pre style='font-size: 25; background-color: #ebeef2;'>{text}</pre>"
+    return html
 
 
 @bp.route("/static/files/<folder>/<name>")

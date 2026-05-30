@@ -5,7 +5,7 @@ import os
 
 import redis
 import transliterate
-from flask import session
+from flask import session, request
 from werkzeug.utils import secure_filename
 
 from config import Bases
@@ -61,6 +61,7 @@ def div_string(string_all, size_block):
     :return:
     """
     list_strings = []
+    end = 0
     numbers_block = len(string_all) // size_block
     for numb in range(numbers_block):
         start = numb * size_block
@@ -100,8 +101,10 @@ def get_fields(base):
 
 def initialize():
     """Инициализация при запуске приложения/смене базы"""
+    base = session.get("base")
+    if base is None:
+        return
 
-    base = session.get("base", "baren")
     session["base"] = base
     print(f"База {base}, таблица {Bases[base]}")
 
@@ -110,8 +113,7 @@ def initialize():
 
     if fields_from_base is None or base_is_changed:
         session["base_is_changed"] = False
-        fields_from_base_dumps = json.dumps(get_fields(base))
-        session["fields_from_base"] = fields_from_base_dumps
+        session["fields_from_base"] = json.dumps(get_fields(base))
 
     path_to_log = f"./profiles/{base}/{base}.log"
     session["path_to_log"] = path_to_log
@@ -139,14 +141,14 @@ def clear_redis_cache():
     """Сброс данных в redis"""
     # Инициализируем подключение к Redis
     redis_client = redis.Redis(host="localhost", port=6379, db=0)
-    print("⚠️ Сервер останавливается! Очищаю кэш Redis...")
+    print("Сервер останавливается! Очистка кэша Redis...")
     try:
-        # Вариант А: Очистить ВООБЩЕ ВСЁ в текущей базе данных Redis
+        # Вариант 1: Очистить все данные в текущей базе данных Redis
         # redis_client.flushdb()
-        # Вариант Б: Если нужно удалить только определенные ключи (например, сессии)
+        # Вариант 2: Если нужно удалить только определенные ключи (например, сессии)
         keys = redis_client.keys("session:*")
         if keys:
             redis_client.delete(*keys)
-        print("✅ Кэш Redis успешно очищен.")
+        print("Кэш Redis успешно очищен.")
     except Exception as e:
-        print(f"❌ Не удалось очистить Redis при закрытии: {e}")
+        print(f"Не удалось очистить Redis при закрытии: {e}")

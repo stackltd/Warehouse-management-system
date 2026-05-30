@@ -81,7 +81,6 @@ class ControlDatabase:
         conn = self._get_conn(base)
         if not query and table:
             query = f"SELECT {fields} FROM {table} WHERE {where} ORDER BY {order_by}"
-        # print(query)
         try:
             cursor = conn.cursor()
             cursor.execute(query, param)
