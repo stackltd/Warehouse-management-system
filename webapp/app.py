@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 
 from flask_login import LoginManager
 from waitress import serve
@@ -18,11 +19,13 @@ login_manager.login_view = (
 @login_manager.user_loader
 def load_user(user_id):
     """Извлечение объекта пользователя по его ID. Вызывается при каждом запросе"""
-    user = User.get_user(query="SELECT * FROM user WHERE id = ?", param=(1,))
+    user = User.get_user(query="SELECT * FROM user WHERE id = ?", param=(user_id,))
     return user
 
 
 if __name__ == "__main__":
-    logging.getLogger('waitress').setLevel(logging.ERROR)
-    serve(app, host="0.0.0.0", port=8080)
-    # app.run(host="0.0.0.0", port=8080, debug=True)
+    logging.getLogger("waitress").setLevel(logging.ERROR)
+    # serve(app, host="0.0.0.0", port=88)
+    app.run(host="0.0.0.0", port=88, debug=True)
+
+

@@ -2,13 +2,25 @@ import datetime
 import json
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 
 import redis
 import transliterate
-from flask import session, request
+from flask import session
 from werkzeug.utils import secure_filename
 
-from config import Bases
+from webapp.config import Bases
+from webapp.models import logger
+
+waitress_formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+waitress_handler = RotatingFileHandler(
+    "logs/waitress.log", maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+waitress_handler.setFormatter(waitress_formatter)
+waitress_logger = logging.getLogger("waitress")  # Создаем изолированный логгер
+waitress_logger.setLevel(logging.DEBUG)
+waitress_logger.addHandler(waitress_handler)
+waitress_logger.debug("start")
 
 
 def str_corr(str_in, ind):
@@ -77,13 +89,13 @@ def load_file(table, f, field, rec_id, folder=""):
     filename = f.filename
     latin = transliterate.translit(filename, "ru", reversed=True)
     name = secure_filename(latin)
-    f.save(os.path.join("static", "files", f"{folder}", name))
+    f.save(os.path.join("webapp", "static", "files", f"{folder}", name))
     query = f"""UPDATE {table} SET `{field}` = ? WHERE id = {rec_id}"""
     return query, name
 
 
 def get_fields(base):
-    with open(f"profiles/{base}/fields.json", "r", encoding="utf-8") as file:
+    with open(f"./webapp/profiles/{base}/fields.json", "r", encoding="utf-8") as file:
         result_dict: dict = json.load(file)
 
     result = [
@@ -101,6 +113,8 @@ def get_fields(base):
 
 def initialize():
     """Инициализация при запуске приложения/смене базы"""
+
+    logger.debug("initialize")
     base = session.get("base")
     if base is None:
         return
@@ -115,13 +129,14 @@ def initialize():
         session["base_is_changed"] = False
         session["fields_from_base"] = json.dumps(get_fields(base))
 
-    path_to_log = f"./profiles/{base}/{base}.log"
+    path_to_log = f"./webapp/profiles/{base}/{base}.log"
     session["path_to_log"] = path_to_log
     logging.basicConfig(
         filename=path_to_log,
         level=logging.INFO,
         format="%(asctime)s - %(message)s",
         datefmt="%d-%m-%Y %H:%M:%S %p",
+        encoding="utf-8",
     )
 
     session["fields_order_out"] = []
@@ -138,14 +153,13 @@ def initialize():
 
 
 def clear_redis_cache():
+    waitress_logger.debug("clear_redis_cache")
+
     """Сброс данных в redis"""
     # Инициализируем подключение к Redis
     redis_client = redis.Redis(host="localhost", port=6379, db=0)
     print("Сервер останавливается! Очистка кэша Redis...")
     try:
-        # Вариант 1: Очистить все данные в текущей базе данных Redis
-        # redis_client.flushdb()
-        # Вариант 2: Если нужно удалить только определенные ключи (например, сессии)
         keys = redis_client.keys("session:*")
         if keys:
             redis_client.delete(*keys)

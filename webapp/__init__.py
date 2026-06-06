@@ -1,10 +1,12 @@
 import logging
+from datetime import timedelta
+
 import redis
 from flask import Flask
 from flask_session import Session
 from flask_wtf import CSRFProtect
 
-from routes import bp
+from webapp.routes import bp
 
 secret_key = "secret_key"
 
@@ -22,17 +24,19 @@ def create_app():
     # Глушим лишние логи
     app.logger.disabled = True
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    # log = logging.getLogger("werkzeug")
-    # log.disabled = True
+    log = logging.getLogger("werkzeug")
+    log.disabled = True
 
-    # app.config["WTF_CSRF_ENABLED"] = False
+    app.config["WTF_CSRF_ENABLED"] = False
 
     app.config["SESSION_TYPE"] = "redis"
     app.config["SESSION_PERMANENT"] = False
     app.config["SESSION_USE_SIGNER"] = True
     app.config["SESSION_REDIS"] = redis.Redis(host="localhost", port=6379)
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
     # Запуск расширение сессий
     Session(app)
     app.register_blueprint(bp)
 
     return app
+

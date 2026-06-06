@@ -50,6 +50,24 @@
             }
         }
     };
+
+    var popupButtons = document.querySelectorAll(".open-popup")
+
+    var popupContainer = document.querySelector('.popup-container')
+
+    function popup_container_control () {
+        popupContainer.style.display = "flex"
+    }
+
+    for (let button of popupButtons) {
+        button.addEventListener('click', popup_container_control)
+      }
+
+      popupContainer.addEventListener('click', function(event){
+        if(event.target == popupContainer) {
+            popupContainer.style.display = 'none';
+            }
+        });
     // if (filter_select) {
     //     filter_select.addEventListener('DOMContentLoaded', change_list)
     // }

@@ -1,15 +1,17 @@
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 
 import redis
 from flask import session, request
-from flask_login import login_user
-from werkzeug.security import check_password_hash
+from flask_login import login_user, current_user
+from werkzeug.security import check_password_hash, generate_password_hash
 
-from config import Bases, FIELD_FOR_SORTING, SORT_DIRECT, SIZE_BLOCK
-from forms import PhotoForm, ManualForm
-from models import ControlDatabase, User
-from utils import str_corr, initialize, load_file, div_string
+from webapp.config import Bases, FIELD_FOR_SORTING, SORT_DIRECT, SIZE_BLOCK
+from webapp.forms import PhotoForm, ManualForm
+from webapp.models import ControlDatabase, User
+from webapp.utils import str_corr, initialize, load_file, div_string
+from webapp.exceptions import Unauthorized
 
 logger = logging.getLogger("логгер")
 logging.raiseExceptions = False
@@ -17,6 +19,23 @@ logging.raiseExceptions = False
 bases = [base_name for base_name in Bases]
 
 r = redis.Redis(host="localhost", port=6379, db=0)
+
+TIME_BLOCK = 60
+
+#  НОВЫЙ ЛОГГЕР ДЛЯ АУТЕНТИФИКАЦИИ (только для входов и лимитеров)
+auth_formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+auth_handler = RotatingFileHandler(
+    "logs/auth_attempts.log", maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8"
+)
+auth_handler.setFormatter(auth_formatter)
+
+auth_logger = logging.getLogger("auth_events")  # Создаем изолированный логгер
+auth_logger.setLevel(logging.INFO)
+auth_logger.addHandler(auth_handler)
+# отключаем передачу логов "наверх" в корневой логгер, чтобы логи входа не дублировались в консоли или других файлах
+auth_logger.propagate = False
+
+auth_log = logging.getLogger("auth_events")
 
 
 class Service:
@@ -31,7 +50,7 @@ class Service:
 
         session["base_is_changed"] = True
         session["base"] = base
-        path_to_log = f"./profiles/{base}/{base}.log"
+        path_to_log = f"./webapp/profiles/{base}/{base}.log"
         session["path_to_log"] = path_to_log
 
         initialize()
@@ -56,6 +75,15 @@ class Service:
         base = session.get("base")
         if base is None:
             raise ValueError("Не выбрана база")
+
+        available_bases = current_user.available_bases or ""
+        if available_bases and current_user.role != "admin":
+            session["available_bases"] = available_bases.split()
+        if current_user.role == "admin":
+            session["available_bases"] = bases
+        if current_user.role != "admin" and base not in available_bases:
+            raise Unauthorized
+
         table = Bases[base]
 
         res = session.get("res")
@@ -162,9 +190,9 @@ class Service:
             statuses=statuses,
             sel_record=sel_record,
             fields=fields,
-            bases=bases,
+            bases=session.get("available_bases", bases),
             base=base,
-            message=["none", ""],
+            message=session.get("message", ["none", ""]),
         )
 
         return context
@@ -203,15 +231,14 @@ class Service:
     @staticmethod
     def change_mode(id):
         """Вход/выход в режим изменения строки"""
-        if id.isdigit():
-            sel_record = session.get("sel_record")
-            session["new_added"] = False
-            # разрешаем изменение строки с номером id. sel_record передается через / в html
-            if sel_record == 0 or sel_record != int(id):
-                sel_record = int(id)
-            else:
-                sel_record = 0
-            session["sel_record"] = sel_record
+        sel_record = session.get("sel_record")
+        session["new_added"] = False
+        # разрешаем изменение строки с номером id. sel_record передается через / в html
+        if sel_record == 0 or sel_record != int(id):
+            sel_record = int(id)
+        else:
+            sel_record = 0
+        session["sel_record"] = sel_record
 
     def change_field(self, id, multidict):
         base = session["base"]
@@ -345,7 +372,8 @@ class Service:
             )
             self.db.update(base=base, query=query, param=name)
 
-    def report(self):
+    @staticmethod
+    def report():
         path_to_log = session.get("path_to_log")
         if path_to_log is None:
             return "Нет данных"
@@ -355,15 +383,29 @@ class Service:
         text_list = []
         for string in text.split("\n")[::-1]:
             length = string.__len__()
-            if length > SIZE_BLOCK:
-                string_divided = div_string(string_all=string, size_block=SIZE_BLOCK)
-                text_list.extend(string_divided)
-            else:
-                text_list.append(string)
+            if all(
+                map(
+                    lambda x: x not in string,
+                    (
+                        "The CSRF session token is missing",
+                        "The CSRF token has expired",
+                        "The CSRF token is missing",
+                        "Task queue depth",
+                    ),
+                )
+            ):
+                if length > SIZE_BLOCK:
+                    string_divided = div_string(
+                        string_all=string, size_block=SIZE_BLOCK
+                    )
+                    text_list.extend(string_divided)
+                else:
+                    text_list.append(string)
         text = "\n".join(text_list)
         return text
 
-    def login(self, username, password):
+    @staticmethod
+    def login(username, password):
         # Получаем IP-адрес клиента для уникальной идентификации
         user_ip = request.remote_addr
         # Ключи для Redis
@@ -372,8 +414,11 @@ class Service:
 
         # Проверяем, есть ли в Redis флаг жесткой блокировки для этого IP
         if r.exists(lock_key):
+            auth_log.warning(
+                f"Попытка входа с IP {user_ip} (логин: {username}) после блокировки"
+            )
             return (
-                "Слишком много попыток входа. Этот IP заблокирован на 15 секунд.",
+                f"Слишком много попыток входа. Этот IP заблокирован на {TIME_BLOCK} секунд.",
                 429,
             )
 
@@ -385,12 +430,15 @@ class Service:
 
         # Если запросов стало больше 5
         if current_requests > 5:
-            # Создаем ключ блокировки на 15 секунд
-            r.setex(lock_key, 15, "blocked")
+            # Создаем ключ блокировки на определенное время
+            r.setex(lock_key, TIME_BLOCK, "blocked")
             # Сбрасываем основной счетчик, чтобы после разблокировки начать заново
             r.delete(count_key)
+            auth_log.warning(
+                f"БЛОКИРОВКА | Превышен лимит попыток для IP:  {user_ip} (логин: {username})"
+            )
             return (
-                "Слишком много попыток входа. Вы заблокированы на 15 секунд.",
+                f"Слишком много попыток входа. Вы заблокированы на {TIME_BLOCK} секунд.",
                 429,
             )
 
@@ -400,6 +448,26 @@ class Service:
         if user and check_password_hash(user.password_hash, password):
             # Flask-Login генерирует сессию, связывает её с Redis и прописывает куку в браузер
             login_user(user, remember=True)
+            auth_log.info(
+                f"УСПЕХ | Пользователь {username} успешно вошел в систему. IP: {user_ip}"
+            )
             # Успешный вход — очищаем кэш попыток в Redis для этого IP
             r.delete(count_key)
             return True
+        auth_log.warning(
+            f"ОТКАЗ | Неверный пароль для пользователя: {username} | IP: {user_ip}"
+        )
+
+    @staticmethod
+    def change_password(db, curr_password, password_1, password_2):
+        if check_password_hash(current_user.password_hash, curr_password):
+            if password_1 == password_2:
+                password_hash = generate_password_hash(password_1)
+                query = f"""UPDATE user SET password_hash = ? WHERE id = {current_user.id}"""
+                db.update(base="main_base", query=query, param=password_hash)
+                message = "Пароль бы успешно сменен"
+            else:
+                message = "Ошибка. Неверно введен подтверждающий пароль"
+        else:
+            message = "Ошибка. Неверно введен пароль"
+        session["message"] = ["inline-block", message]

@@ -2,10 +2,11 @@ import atexit
 from flask import render_template, redirect, g, session, Blueprint, request, flash
 from flask_login import login_required, logout_user
 
-from models import ControlDatabase
-from services import Service
-from utils import initialize, clear_redis_cache
+from webapp.models import ControlDatabase
+from webapp.services import Service
+from webapp.utils import initialize, clear_redis_cache
 from webapp.config import Bases
+from webapp.exceptions import Unauthorized
 
 bp = Blueprint("main", __name__)
 
@@ -29,6 +30,7 @@ def close_connection(exception):
 @bp.before_request
 def setup_user_session():
     """Инициализация контекста, логирования при запуске приложения"""
+
     if session.get("base") is None:
         initialize()
 
@@ -48,11 +50,23 @@ def login():
     return render_template("index.html")
 
 
+@bp.route("/change_password", methods=["POST"])
+def change_password():
+    """Смена пароля"""
+    args = [
+        request.form.get(arg) for arg in ("curr_password", "password_1", "password_2")
+    ]
+    service.change_password(db, *args)
+    return redirect("/")
+
+
 @bp.route("/logout")
 @login_required
 def logout():
     """Выход из системы"""
-    logout_user()  # Удаляет сессию из Redis и затирает куку
+    initialize()
+    session["fields_from_base"] = "[]"
+    logout_user()  # Удаление сессии из Redis и стирание куки
     return redirect("/login")
 
 
@@ -66,7 +80,6 @@ def select_base():
             template_name_or_list="index.html",
             message=["inline-block", "Ошибка выбора базы"],
         )
-
     return redirect("/")
 
 
@@ -77,12 +90,14 @@ def stock():
     try:
         context = service.get_fields_for_render()
         return render_template(**context)
-    except ValueError:
+    except (ValueError, Unauthorized):
         return render_template(
             template_name_or_list="index.html",
-            bases=[base_name for base_name in Bases],
+            bases=session.get("available_bases", [base_name for base_name in Bases]),
             message=["inline-block", "Выберите базу"],
         )
+    finally:
+        session["message"] = ["none", ""]
 
 
 @bp.route("/sorting/<id>")
@@ -92,14 +107,14 @@ def sorting(id):
     return redirect("/")
 
 
-@bp.route("/change_mode/<id>")
+@bp.route("/change_mode/<int:id>")
 def change_mode(id):
     """Вход/выход в режим изменения строки"""
     service.change_mode(id)
     return redirect("/")
 
 
-@bp.route("/change/<id>", methods=["POST"])
+@bp.route("/change/<int:id>", methods=["POST"])
 def change(id):
     """Изменение строки после вхождения в режим change_mode"""
     form = dict(request.form)
@@ -115,11 +130,10 @@ def add_record():
     return redirect("/")
 
 
-@bp.route("/add_file/<id>", methods=["POST"])
+@bp.route("/add_file/<int:id>", methods=["POST"])
 def add_file(id):
     """Добавление файла"""
-    if id.isdigit():
-        service.upload_file(id)
+    service.upload_file(id)
     return redirect("/")
 
 

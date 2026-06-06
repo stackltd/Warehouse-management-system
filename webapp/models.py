@@ -7,6 +7,7 @@ from flask import g
 logger = logging.getLogger("логгер.models")
 
 
+
 class ControlDatabase:
 
     def __init__(self, debug=False):
@@ -19,7 +20,7 @@ class ControlDatabase:
         """
         db = getattr(g, "_database", None)
         if db is None:
-            db = g._database = sqlite3.connect(f"databases/{base}.db")
+            db = g._database = sqlite3.connect(f"./webapp/databases/{base}.db")
 
         return db
 
@@ -32,15 +33,17 @@ class ControlDatabase:
         return conn
 
     @staticmethod
-    def create_table(base, query_create_table):
-        with sqlite3.connect(f"databases/{base}.db") as conn:
+    def create_base(base, query_create_table):
+        with sqlite3.connect(f"./databases/{base}.db") as conn:
             cursor = conn.cursor()
             cursor.execute(query_create_table)
             conn.commit()
 
-    def insert(self, base, names_dict):
+    def insert(self, base, names_dict, table=None):
         conn = self._get_conn(base)
-        table = Bases[base]
+        if not table:
+            from .config import Bases
+            table =     Bases[base]
         keys = ", ".join([f'"{name}"' for name in names_dict])
         values = ", ".join([f"{names_dict[name]}" for name in names_dict])
         # используем параметризованные запросы
@@ -108,44 +111,12 @@ class User(UserMixin):
 
     @classmethod
     def get_user(cls, query, param):
-        with sqlite3.connect(f"./databases/db.sqlite3.db") as obj:
+        with sqlite3.connect(f"./webapp/databases/main_base.db") as obj:
             conn = obj
             cursor = conn.cursor()
-            user_get_field = cursor.execute(query, param).fetchall()
+            user_get_field = cursor.execute(query, param).fetchone()
             if not user_get_field:
                 return []
-        user = User(*user_get_field[0])
+        user = User(*user_get_field)
         return user
 
-
-if __name__ == "__main__":
-    from config import Bases
-
-    """            query = "SELECT * FROM 'user' WHERE 'username' = ?"
-            param = (username,)"""
-    base = "db.sqlite3"
-    table = ""
-    asd = ControlDatabase(debug=True)
-    res = asd.select(
-        base=base,
-        query="SELECT * FROM user WHERE username = ?",
-        # table=table,
-        # fields="coeff",
-        param=("admin",),
-        # where="username = ?",
-    )
-
-    # res = User.get_user_by(db=ControlDatabase(debug=True), field="id", value=1)
-    print(res)
-    for i in res:
-        print(i)
-
-    # query_create_table = """CREATE TABLE IF NOT EXISTS user (
-    #                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    #                                     username TEXT UNIQUE,
-    #                                     password_hash TEXT,
-    #                                     role TEXT,
-    #                                     fullname TEXT,
-    #                                     available_bases TEXT);
-    #                                   """
-    # ControlDatabase().create_table("db.sqlite3", query_create_table)

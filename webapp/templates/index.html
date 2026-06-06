@@ -20,6 +20,25 @@
 
 </head>
 <body>
+  <div class="popup-container">
+    <form action="/change_password" method="POST" class="auth">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <h2 class="auth-title">Смена пароля</h2>
+      <div class="head-1 flex">
+      </div>
+      <div class="field">
+        <input type="password" id="curr_password" name="curr_password" class="reg-form-input" placeholder="текущий пароль" required>
+      </div>
+      <div class="field">
+        <input type="password" id="password_1" name="password_1" class="reg-form-input" placeholder="новый пароль" autocomplete="new-password" required>
+      </div>
+      <div class="field">
+        <input type="password" id="password_2" name="password_2" class="reg-form-input" placeholder="новый пароль" autocomplete="new-password" required>
+      </div>
+      <input type="submit" value="Отправить">
+    </form>
+  </div>
+
   {% if not current_user.is_authenticated %}
     <div class="auth-container">
       <form action="/login" method="POST" class="auth">
@@ -41,7 +60,9 @@
 
   <div class="container">
     <div class="container title_head">
+
       <div class="add_new_record flex">
+
 
           <p>Привет, {{ current_user.username }} (роль: {{ current_user.role }})</p>
 
@@ -101,8 +122,8 @@
         <form action="/logout" method="GET" class="flex form_add form_format">
           <button type="submit" value="1" name="format">Выйти</button>
         </form>
+        <button class="open-popup">Сменить пароль</button>
       </div>
-
         <!-- заголовки -->
       <div class="titles_fields head flex">
         {% for key in fields_params %}
