@@ -10,7 +10,7 @@ if __name__ == "__main__":
     all_lines = raw_output.split("\n")
     result = [line for line in all_lines if line and not line.startswith(" ")]
 
-    with open("_requirements.txt", "w", encoding="utf-8") as obj:
+    with open("requirements.txt", "w", encoding="utf-8") as obj:
         obj.write("\n".join(result))
 
     print(f"Успешно создано! Записано строк: {len(result)}")

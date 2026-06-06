@@ -1,17 +1,22 @@
 import json
 import logging
 
+import redis
 from flask import session, request
+from flask_login import login_user
+from werkzeug.security import check_password_hash
 
 from config import Bases, FIELD_FOR_SORTING, SORT_DIRECT, SIZE_BLOCK
 from forms import PhotoForm, ManualForm
-from models import ControlDatabase
+from models import ControlDatabase, User
 from utils import str_corr, initialize, load_file, div_string
 
 logger = logging.getLogger("логгер")
 logging.raiseExceptions = False
 
 bases = [base_name for base_name in Bases]
+
+r = redis.Redis(host="localhost", port=6379, db=0)
 
 
 class Service:
@@ -51,8 +56,8 @@ class Service:
         base = session.get("base")
         if base is None:
             raise ValueError("Не выбрана база")
-
         table = Bases[base]
+
         res = session.get("res")
         command = session.get("command")
         summ_some_fields = session.get("summ_some_fields")
@@ -96,6 +101,7 @@ class Service:
                 command = f"""SELECT * FROM {table} ORDER BY category"""
             elif multidict.get("заказы"):
                 command = f"""SELECT * FROM {table} WHERE status in ({', '.join([f"'{x}'" for x in statuses][:-1])}) ORDER BY history"""
+
             else:
                 command = f"""SELECT * FROM {table} WHERE category IN ({fields_str}) ORDER BY category"""
             res = self.db.select(base=base, query=command)
@@ -103,7 +109,6 @@ class Service:
         elif not multidict:
             result.clear()
             res = self.db.select(base=base, query=command)
-
         if res:
             result.clear()
             for ind, string in enumerate(res):
@@ -357,3 +362,44 @@ class Service:
                 text_list.append(string)
         text = "\n".join(text_list)
         return text
+
+    def login(self, username, password):
+        # Получаем IP-адрес клиента для уникальной идентификации
+        user_ip = request.remote_addr
+        # Ключи для Redis
+        count_key = f"login_count:{user_ip}"
+        lock_key = f"login_lock:{user_ip}"
+
+        # Проверяем, есть ли в Redis флаг жесткой блокировки для этого IP
+        if r.exists(lock_key):
+            return (
+                "Слишком много попыток входа. Этот IP заблокирован на 15 секунд.",
+                429,
+            )
+
+        # Если ключа не было, увеличиваем счетчик запросов в Redis
+        current_requests = r.incr(count_key)
+        # Если это первый запрос в серии, задаем ему время жизни (например, окно в 1 минуту)
+        if current_requests == 1:
+            r.expire(count_key, 60)
+
+        # Если запросов стало больше 5
+        if current_requests > 5:
+            # Создаем ключ блокировки на 15 секунд
+            r.setex(lock_key, 15, "blocked")
+            # Сбрасываем основной счетчик, чтобы после разблокировки начать заново
+            r.delete(count_key)
+            return (
+                "Слишком много попыток входа. Вы заблокированы на 15 секунд.",
+                429,
+            )
+
+        user = User.get_user(
+            query="SELECT * FROM user WHERE username = ?", param=(username,)
+        )
+        if user and check_password_hash(user.password_hash, password):
+            # Flask-Login генерирует сессию, связывает её с Redis и прописывает куку в браузер
+            login_user(user, remember=True)
+            # Успешный вход — очищаем кэш попыток в Redis для этого IP
+            r.delete(count_key)
+            return True

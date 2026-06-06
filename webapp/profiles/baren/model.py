@@ -32,6 +32,18 @@ query_create_table = """CREATE TABLE IF NOT EXISTS warehouse (
                                   """
 
 if __name__ == "__main__":
-    from models import ControlDatabase
+    if __name__ == "__main__":
+        from werkzeug.security import generate_password_hash, check_password_hash
 
-    ControlDatabase().create_table("baren", query_create_table)
+        # 1. Берем пароль в явном виде (например, из request.form)
+        plain_password = "123"
+
+        # 2. Генерируем хэш
+        password_hash = generate_password_hash(plain_password)
+
+        # Смотрим, что получилось
+        print("Оригинальный пароль:", plain_password)
+        print("Хэш для базы данных:", password_hash)
+        # Выведет что-то вроде: scrypt:32768:8:1$uYx8N...$efc09...
+        is_valid = check_password_hash(password_hash, plain_password)
+        print(is_valid)

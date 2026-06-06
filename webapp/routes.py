@@ -1,5 +1,6 @@
 import atexit
-from flask import render_template, redirect, g, session, Blueprint, request
+from flask import render_template, redirect, g, session, Blueprint, request, flash
+from flask_login import login_required, logout_user
 
 from models import ControlDatabase
 from services import Service
@@ -32,6 +33,29 @@ def setup_user_session():
         initialize()
 
 
+@bp.route("/login", methods=["GET", "POST"])
+def login():
+    """Заход в систему. Контроль попыток перебора паролей с текущего IP"""
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        result = service.login(username, password)
+        if isinstance(result, tuple):
+            return result
+        elif result:
+            return redirect("/")
+    flash("Неверный логин или пароль")
+    return render_template("index.html")
+
+
+@bp.route("/logout")
+@login_required
+def logout():
+    """Выход из системы"""
+    logout_user()  # Удаляет сессию из Redis и затирает куку
+    return redirect("/login")
+
+
 @bp.route("/select_base")
 def select_base():
     """Смена базы"""
@@ -47,6 +71,7 @@ def select_base():
 
 
 @bp.route("/")
+@login_required
 def stock():
     """Рендеринг полей"""
     try:

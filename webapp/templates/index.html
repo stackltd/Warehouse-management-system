@@ -13,15 +13,38 @@
   {% else %}
   <link rel="stylesheet" href="../static/css/style.css">
   {% endif %}
+  <link rel="stylesheet" href="../static/css/style-form.css">
   <script defer src="../static/js/jquery.js"></script>
   <script defer src="../static/js/main.js"></script>
   <script defer src="../static/js/snowstorm.js"></script>
 
 </head>
 <body>
+  {% if not current_user.is_authenticated %}
+    <div class="auth-container">
+      <form action="/login" method="POST" class="auth">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <h2 class="auth-title">Войдите в систему</h2>
+        <div class="head-1 flex">
+        </div>
+        <div class="field">
+          <input type="text" id="username" name="username" class="reg-form-input" placeholder="логин" required>
+        </div>
+        <div class="field">
+          <input type="password" id="password" name="password" class="reg-form-input" placeholder="пароль" autocomplete="new-password" required>
+        </div>
+        <input type="submit" value="Отправить">
+      </form>
+    </div>
+
+  {% else %}
+
   <div class="container">
     <div class="container title_head">
       <div class="add_new_record flex">
+
+          <p>Привет, {{ current_user.username }} (роль: {{ current_user.role }})</p>
+
         <h3 style="margin: 0; color: rgb(57, 100, 217);" > {{ base }} </h3>
         <!-- добавление новой позиции -->
         <form action="/add_record/" method="post" class="flex form_add">
@@ -73,6 +96,10 @@
             </select>
           </div>         
           <button class="btn-reset btn button_filter" type="submit" style="font-size: 15px;">выбор базы</button>
+        </form>
+
+        <form action="/logout" method="GET" class="flex form_add form_format">
+          <button type="submit" value="1" name="format">Выйти</button>
         </form>
       </div>
 
@@ -336,6 +363,6 @@
       </div>
     {% endfor %}
   </div>
-
+  {% endif %}
 </body>
 </html>

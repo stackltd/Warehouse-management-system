@@ -91,16 +91,61 @@ class ControlDatabase:
             return []
 
 
+from flask_login import UserMixin
+
+
+# класс пользователя для БД
+class User(UserMixin):
+    def __init__(
+        self, user_id, username, password_hash, role, fullname="", available_bases=""
+    ):
+        self.id = user_id
+        self.username = username
+        self.password_hash = password_hash
+        self.role = role
+        self.fullname = fullname
+        self.available_bases = available_bases
+
+    @classmethod
+    def get_user(cls, query, param):
+        with sqlite3.connect(f"./databases/db.sqlite3.db") as obj:
+            conn = obj
+            cursor = conn.cursor()
+            user_get_field = cursor.execute(query, param).fetchall()
+            if not user_get_field:
+                return []
+        user = User(*user_get_field[0])
+        return user
+
+
 if __name__ == "__main__":
     from config import Bases
 
-    base = "baren"
+    """            query = "SELECT * FROM 'user' WHERE 'username' = ?"
+            param = (username,)"""
+    base = "db.sqlite3"
+    table = ""
     asd = ControlDatabase(debug=True)
     res = asd.select(
         base=base,
-        table="warehouse",
+        query="SELECT * FROM user WHERE username = ?",
+        # table=table,
         # fields="coeff",
-        # where="coeff LIKE 'μF'",
+        param=("admin",),
+        # where="username = ?",
     )
+
+    # res = User.get_user_by(db=ControlDatabase(debug=True), field="id", value=1)
+    print(res)
     for i in res:
         print(i)
+
+    # query_create_table = """CREATE TABLE IF NOT EXISTS user (
+    #                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #                                     username TEXT UNIQUE,
+    #                                     password_hash TEXT,
+    #                                     role TEXT,
+    #                                     fullname TEXT,
+    #                                     available_bases TEXT);
+    #                                   """
+    # ControlDatabase().create_table("db.sqlite3", query_create_table)

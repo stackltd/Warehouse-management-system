@@ -6,13 +6,13 @@ from flask_wtf import CSRFProtect
 
 from routes import bp
 
-secret_key = "супер_секретный_ключ_который_никто_не_должен_знать"
+secret_key = "secret_key"
 
 # Инициализируем csrf глобально, без привязки к конкретному app
 csrf = CSRFProtect()
 
-def create_app():
 
+def create_app():
 
     app = Flask(__name__)
     app.secret_key = secret_key
