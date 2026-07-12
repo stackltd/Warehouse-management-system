@@ -25,7 +25,5 @@ def load_user(user_id):
 
 if __name__ == "__main__":
     logging.getLogger("waitress").setLevel(logging.ERROR)
-    # serve(app, host="0.0.0.0", port=88)
-    app.run(host="0.0.0.0", port=88, debug=True)
-
+    serve(app, host="0.0.0.0", port=8080)
 

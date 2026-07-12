@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import timedelta
 
 import redis
@@ -8,7 +9,11 @@ from flask_wtf import CSRFProtect
 
 from webapp.routes import bp
 
-secret_key = "secret_key"
+from dotenv import load_dotenv
+
+load_dotenv()
+
+secret_key = os.getenv("secret_key")
 
 # Инициализируем csrf глобально, без привязки к конкретному app
 csrf = CSRFProtect()

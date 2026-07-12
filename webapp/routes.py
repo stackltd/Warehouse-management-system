@@ -71,6 +71,7 @@ def logout():
 
 
 @bp.route("/select_base")
+@login_required
 def select_base():
     """Смена базы"""
     try:
@@ -101,6 +102,7 @@ def stock():
 
 
 @bp.route("/sorting/<id>")
+@login_required
 def sorting(id):
     """Сортировка столбца по параметру"""
     service.sorting_by_field(id)
@@ -108,6 +110,7 @@ def sorting(id):
 
 
 @bp.route("/change_mode/<int:id>")
+@login_required
 def change_mode(id):
     """Вход/выход в режим изменения строки"""
     service.change_mode(id)
@@ -115,6 +118,7 @@ def change_mode(id):
 
 
 @bp.route("/change/<int:id>", methods=["POST"])
+@login_required
 def change(id):
     """Изменение строки после вхождения в режим change_mode"""
     form = dict(request.form)
@@ -123,6 +127,7 @@ def change(id):
 
 
 @bp.route("/add_record/", methods=["POST"])
+@login_required
 def add_record():
     """Добавление новой записи"""
     form = dict(request.form)
@@ -131,6 +136,7 @@ def add_record():
 
 
 @bp.route("/add_file/<int:id>", methods=["POST"])
+@login_required
 def add_file(id):
     """Добавление файла"""
     service.upload_file(id)
@@ -138,6 +144,7 @@ def add_file(id):
 
 
 @bp.route("/report")
+@login_required
 def report():
     """История изменений в базе"""
     text = service.report()
@@ -146,6 +153,7 @@ def report():
 
 
 @bp.route("/static/files/<folder>/<name>")
+@login_required
 def redirect_from_photo(folder, name):
     """Перенаправление с клика по photo, если в fields.json задан параметр url_for_redirect_from_photo"""
     url_for_redirect_from_photo = session["url_for_redirect_from_photo"]
